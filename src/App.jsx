@@ -308,12 +308,9 @@ Keep total response under 300 words.`;
       <Input label="Notes / Inspiration" value={form.notes} onChange={f("notes")} placeholder="Tell us about the vision…" style={{ marginBottom: "16px" }} />
 
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <Btn onClick={handleSubmit}><Icon d={ICONS.ai} size={14} color={T.bg} /> Generate AI Summary</Btn>
-        {aiResult && <Btn onClick={saveClient} variant="success"><Icon d={ICONS.check} size={14} color={T.green} /> Save Client</Btn>}
+        <Btn onClick={saveClient} variant="success"><Icon d={ICONS.check} size={14} color={T.green} /> Save Client</Btn>
         {saved && <Badge label="✓ Saved!" color={T.green} />}
       </div>
-
-      {(loading || aiResult) && <AIBox content={aiResult} loading={loading} />}
     </div>
   );
 }

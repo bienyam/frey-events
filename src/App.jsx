@@ -1,25 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const T = {
-  bg: "#0f0d0b",
-  surface: "#1a1714",
-  card: "#211e1a",
-  border: "#2e2a25",
-  gold: "#c9a84c",
-  goldLight: "#e8c97a",
-  goldDim: "#7a6430",
-  rose: "#c97a7a",
-  cream: "#f0e8d8",
-  creamDim: "#a89880",
-  green: "#7ab892",
-  blue: "#7aaac9",
-  text: "#f0e8d8",
-  textDim: "#786a58",
-  textMid: "#b09878",
+  bg: "#0f0d0b", surface: "#1a1714", card: "#211e1a", border: "#2e2a25",
+  gold: "#c9a84c", goldLight: "#e8c97a", goldDim: "#7a6430",
+  rose: "#c97a7a", cream: "#f0e8d8", creamDim: "#a89880",
+  green: "#7ab892", blue: "#7aaac9", text: "#f0e8d8", textDim: "#786a58", textMid: "#b09878",
 };
 
-const css = (obj) => Object.entries(obj).map(([k, v]) => `${k.replace(/([A-Z])/g, "-$1").toLowerCase()}:${v}`).join(";");
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+const ADMIN_PIN = "3440";
+const STAFF_PINS = { "s1": "1234", "s2": "2345", "s3": "3456", "s4": "4567" };
 
 // ─── AI HELPER ────────────────────────────────────────────────────────────────
 async function callAI(prompt, system = "") {
@@ -28,8 +19,7 @@ async function callAI(prompt, system = "") {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      model: "claude-sonnet-4-20250514", max_tokens: 1000,
       system: system || "You are an expert event planning assistant for Frey Events, a luxury event company. Be concise, professional, and specific.",
       messages: [{ role: "user", content: prompt }],
     }),
@@ -38,12 +28,17 @@ async function callAI(prompt, system = "") {
   return data.content?.[0]?.text || "";
 }
 
-// ─── STORAGE HELPERS ──────────────────────────────────────────────────────────
-async function load(key) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
-}
-async function save(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+async function load(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
+async function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+// ─── GEO HELPER ───────────────────────────────────────────────────────────────
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
@@ -54,8 +49,8 @@ const SEED = {
     { id: "c3", name: "Priya Nair", email: "priya@email.com", phone: "555-0303", eventType: "Birthday", budget: 3200, status: "Lead", tag: "", createdAt: "2025-05-22" },
   ],
   events: [
-    { id: "e1", clientId: "c1", name: "Reinholt Wedding", date: "2025-08-15", venue: "The Grand Pavilion", guests: 180, style: "Luxury", status: "Booked", revenue: 18000, inventoryCost: 4200, laborCost: 3100 },
-    { id: "e2", clientId: "c2", name: "Teel Corp Gala", date: "2025-07-22", venue: "Rooftop 54", guests: 90, style: "Modern", status: "Consult", revenue: 7500, inventoryCost: 1800, laborCost: 1400 },
+    { id: "e1", clientId: "c1", name: "Reinholt Wedding", date: "2025-08-15", venue: "The Grand Pavilion", venueLat: 44.9778, venueLng: -93.2650, guests: 180, style: "Luxury", status: "Booked", revenue: 18000, inventoryCost: 4200, laborCost: 3100 },
+    { id: "e2", clientId: "c2", name: "Teel Corp Gala", date: "2025-07-22", venue: "Rooftop 54", venueLat: 44.9800, venueLng: -93.2700, guests: 90, style: "Modern", status: "Consult", revenue: 7500, inventoryCost: 1800, laborCost: 1400 },
   ],
   inventory: [
     { id: "i1", name: "Chiavari Chairs", category: "Seating", qty: 300, reserved: 180 },
@@ -66,16 +61,17 @@ const SEED = {
     { id: "i6", name: "LED Uplights", category: "Lighting", qty: 50, reserved: 18 },
   ],
   staff: [
-    { id: "s1", name: "Jordan Lee", role: "Lead Coordinator", rate: 45 },
-    { id: "s2", name: "Aaliya Moss", role: "Floral Designer", rate: 38 },
-    { id: "s3", name: "Dmitri Vance", role: "Setup Crew", rate: 22 },
-    { id: "s4", name: "Tina Park", role: "Setup Crew", rate: 22 },
+    { id: "s1", name: "Jordan Lee", role: "Lead Coordinator", rate: 45, pin: "1234" },
+    { id: "s2", name: "Aaliya Moss", role: "Floral Designer", rate: 38, pin: "2345" },
+    { id: "s3", name: "Dmitri Vance", role: "Setup Crew", rate: 22, pin: "3456" },
+    { id: "s4", name: "Tina Park", role: "Setup Crew", rate: 22, pin: "4567" },
   ],
   shifts: [
     { id: "sh1", eventId: "e1", staffId: "s1", role: "Coordinator", start: "10:00", end: "22:00", hours: 12 },
     { id: "sh2", eventId: "e1", staffId: "s2", role: "Floral", start: "08:00", end: "14:00", hours: 6 },
     { id: "sh3", eventId: "e1", staffId: "s3", role: "Setup", start: "07:00", end: "16:00", hours: 9 },
   ],
+  clockEntries: [],
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -92,15 +88,15 @@ const ICONS = {
   staff: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 11a4 4 0 100-8 4 4 0 000 8z",
   finance: "M12 2v20 M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6",
   intake: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z",
-  ai: "M12 2a10 10 0 110 20A10 10 0 0112 2z M8 12h8 M12 8v8",
+  clock: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2",
   check: "M20 6L9 17l-5-5",
   x: "M18 6L6 18 M6 6l12 12",
   plus: "M12 5v14 M5 12h14",
-  arrow: "M5 12h14 M12 5l7 7-7 7",
   alert: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01",
-  refresh: "M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0114.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0020.49 15",
   briefing: "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
-  send: "M22 2L11 13 M22 2L15 22l-4-9-9-4z",
+  logout: "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4 M16 17l5-5-5-5 M21 12H9",
+  location: "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 10a1 1 0 100-2 1 1 0 000 2",
+  coffee: "M18 8h1a4 4 0 010 8h-1 M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z M6 1v3 M10 1v3 M14 1v3",
 };
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
@@ -111,6 +107,7 @@ const Btn = ({ children, onClick, variant = "primary", small, style: s = {} }) =
     ghost: { background: "transparent", color: T.textMid, border: `1px solid ${T.border}` },
     danger: { background: "transparent", color: T.rose, border: `1px solid ${T.rose}33` },
     success: { background: `${T.green}22`, color: T.green, border: `1px solid ${T.green}44` },
+    warning: { background: `${T.gold}22`, color: T.gold, border: `1px solid ${T.gold}44` },
   };
   return <button onClick={onClick} style={{ ...base, ...variants[variant], ...s }}>{children}</button>;
 };
@@ -162,17 +159,337 @@ const AIBox = ({ content, loading }) => (
   </div>
 );
 
-// ─── VIEWS ────────────────────────────────────────────────────────────────────
+// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin, staff }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
 
+  function handleDigit(d) {
+    if (pin.length >= 4) return;
+    const next = pin + d;
+    setPin(next);
+    setError("");
+    if (next.length === 4) {
+      setTimeout(() => attempt(next), 100);
+    }
+  }
+
+  function attempt(p) {
+    if (p === ADMIN_PIN) { onLogin("admin", null); return; }
+    const found = staff.find(s => s.pin === p);
+    if (found) { onLogin("staff", found); return; }
+    setError("Incorrect PIN");
+    setPin("");
+  }
+
+  function handleClear() { setPin(""); setError(""); }
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap'); * { box-sizing: border-box; }`}</style>
+      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "32px", color: T.gold, marginBottom: "4px", letterSpacing: "0.05em" }}>✦ Frey Events</div>
+      <div style={{ color: T.textMid, fontSize: "13px", marginBottom: "40px", letterSpacing: "0.1em" }}>COMMAND CENTER</div>
+
+      <Card style={{ width: "100%", maxWidth: "320px", textAlign: "center" }}>
+        <div style={{ fontSize: "13px", color: T.textMid, marginBottom: "16px", letterSpacing: "0.08em" }}>ENTER YOUR PIN</div>
+
+        {/* PIN dots */}
+        <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginBottom: "24px" }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{ width: "14px", height: "14px", borderRadius: "50%", background: pin.length > i ? T.gold : T.border, transition: "background 0.2s" }} />
+          ))}
+        </div>
+
+        {error && <div style={{ color: T.rose, fontSize: "12px", marginBottom: "12px" }}>{error}</div>}
+
+        {/* Numpad */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          {[1,2,3,4,5,6,7,8,9].map(d => (
+            <button key={d} onClick={() => handleDigit(String(d))} style={{ padding: "16px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "8px", color: T.cream, fontSize: "18px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
+              {d}
+            </button>
+          ))}
+          <button onClick={handleClear} style={{ padding: "16px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.rose, fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>CLR</button>
+          <button onClick={() => handleDigit("0")} style={{ padding: "16px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: "8px", color: T.cream, fontSize: "18px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>0</button>
+          <button onClick={() => setPin(p => p.slice(0,-1))} style={{ padding: "16px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "8px", color: T.textMid, fontSize: "16px", cursor: "pointer", fontFamily: "inherit" }}>⌫</button>
+        </div>
+      </Card>
+
+      <div style={{ marginTop: "20px", fontSize: "11px", color: T.textDim, textAlign: "center" }}>
+        Admin: 3440 &nbsp;·&nbsp; Staff use your assigned PIN
+      </div>
+    </div>
+  );
+}
+
+// ─── CLOCK IN/OUT VIEW (Staff only) ──────────────────────────────────────────
+function ClockView({ staffMember, data, setData, onLogout }) {
+  const [status, setStatus] = useState("out"); // out | in | break
+  const [activeEntry, setActiveEntry] = useState(null);
+  const [geoStatus, setGeoStatus] = useState("");
+  const [geoOk, setGeoOk] = useState(null);
+  const [now, setNow] = useState(new Date());
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    // Check if already clocked in
+    const existing = (data.clockEntries || []).find(e => e.staffId === staffMember.id && !e.clockOut);
+    if (existing) {
+      setActiveEntry(existing);
+      setStatus(existing.onBreak ? "break" : "in");
+    }
+    return () => clearInterval(t);
+  }, []);
+
+  const todayEvents = data.events.filter(e => {
+    const today = new Date().toISOString().slice(0,10);
+    return e.date === today || true; // show all for demo
+  });
+
+  async function getLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject("Geolocation not supported"); return; }
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
+    });
+  }
+
+  async function checkGeo(event) {
+    if (!event?.venueLat) { setGeoOk(true); setGeoStatus("No venue location set — check-in recorded"); return true; }
+    try {
+      setGeoStatus("Getting your location…");
+      const pos = await getLocation();
+      const dist = getDistanceMeters(pos.coords.latitude, pos.coords.longitude, event.venueLat, event.venueLng);
+      if (dist <= 500) {
+        setGeoOk(true);
+        setGeoStatus(`✓ At venue (${Math.round(dist)}m away)`);
+        return true;
+      } else {
+        setGeoOk(false);
+        setGeoStatus(`⚠ ${Math.round(dist)}m from venue — check-in flagged`);
+        return false; // still allow but flagged
+      }
+    } catch {
+      setGeoOk(null);
+      setGeoStatus("Location unavailable — check-in recorded without geo");
+      return true;
+    }
+  }
+
+  async function clockIn(event) {
+    const atVenue = await checkGeo(event);
+    const entry = {
+      id: `ce${Date.now()}`,
+      staffId: staffMember.id,
+      staffName: staffMember.name,
+      eventId: event?.id || null,
+      eventName: event?.name || "General",
+      clockIn: new Date().toISOString(),
+      clockOut: null,
+      breaks: [],
+      onBreak: false,
+      flagged: !atVenue,
+    };
+    const updated = { ...data, clockEntries: [...(data.clockEntries || []), entry] };
+    setData(updated);
+    await save("frey-clockentries", updated.clockEntries);
+    setActiveEntry(entry);
+    setStatus("in");
+    setMsg("Clocked in successfully!");
+    setTimeout(() => setMsg(""), 2500);
+  }
+
+  async function startBreak() {
+    const updated_entry = { ...activeEntry, onBreak: true, breaks: [...(activeEntry.breaks || []), { start: new Date().toISOString(), end: null }] };
+    const entries = (data.clockEntries || []).map(e => e.id === activeEntry.id ? updated_entry : e);
+    const updated = { ...data, clockEntries: entries };
+    setData(updated);
+    await save("frey-clockentries", entries);
+    setActiveEntry(updated_entry);
+    setStatus("break");
+    setMsg("Break started");
+    setTimeout(() => setMsg(""), 2000);
+  }
+
+  async function endBreak() {
+    const breaks = (activeEntry.breaks || []).map((b, i) =>
+      i === activeEntry.breaks.length - 1 ? { ...b, end: new Date().toISOString() } : b
+    );
+    const updated_entry = { ...activeEntry, onBreak: false, breaks };
+    const entries = (data.clockEntries || []).map(e => e.id === activeEntry.id ? updated_entry : e);
+    const updated = { ...data, clockEntries: entries };
+    setData(updated);
+    await save("frey-clockentries", entries);
+    setActiveEntry(updated_entry);
+    setStatus("in");
+    setMsg("Break ended — back on the clock");
+    setTimeout(() => setMsg(""), 2000);
+  }
+
+  async function clockOut() {
+    const clockOutTime = new Date().toISOString();
+    const inTime = new Date(activeEntry.clockIn);
+    const outTime = new Date(clockOutTime);
+    const totalMs = outTime - inTime;
+    const breakMs = (activeEntry.breaks || []).reduce((sum, b) => {
+      if (b.start && b.end) return sum + (new Date(b.end) - new Date(b.start));
+      return sum;
+    }, 0);
+    const paidHours = Math.round(((totalMs - breakMs) / 3600000) * 100) / 100;
+
+    const updated_entry = { ...activeEntry, clockOut: clockOutTime, onBreak: false, paidHours };
+    const entries = (data.clockEntries || []).map(e => e.id === activeEntry.id ? updated_entry : e);
+    const updated = { ...data, clockEntries: entries };
+    setData(updated);
+    await save("frey-clockentries", entries);
+    setActiveEntry(null);
+    setStatus("out");
+    setMsg(`Clocked out! Paid hours: ${paidHours}h`);
+    setTimeout(() => setMsg(""), 4000);
+  }
+
+  function formatTime(iso) {
+    if (!iso) return "--";
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function elapsed(iso) {
+    if (!iso) return "0:00";
+    const ms = now - new Date(iso);
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
+  const breakMs = (activeEntry?.breaks || []).reduce((sum, b) => {
+    if (b.start && b.end) return sum + (new Date(b.end) - new Date(b.start));
+    if (b.start && !b.end) return sum + (now - new Date(b.start));
+    return sum;
+  }, 0);
+  const breakMins = Math.floor(breakMs / 60000);
+
+  const myPastEntries = (data.clockEntries || []).filter(e => e.staffId === staffMember.id && e.clockOut).slice(-5).reverse();
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans', sans-serif", color: T.text }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap'); * { box-sizing: border-box; } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+
+      {/* Header */}
+      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontFamily: "Playfair Display, serif", color: T.gold, fontSize: "16px" }}>✦ Frey Events</div>
+          <div style={{ fontSize: "12px", color: T.textMid }}>{staffMember.name} · {staffMember.role}</div>
+        </div>
+        <Btn small variant="ghost" onClick={onLogout}><Icon d={ICONS.logout} size={14} color={T.textMid} /> Logout</Btn>
+      </div>
+
+      <div style={{ maxWidth: "480px", margin: "0 auto", padding: "24px 16px" }}>
+
+        {/* Clock display */}
+        <Card style={{ textAlign: "center", marginBottom: "16px", borderColor: status === "in" ? T.green : status === "break" ? T.gold : T.border }}>
+          <div style={{ fontSize: "11px", color: T.textMid, letterSpacing: "0.1em", marginBottom: "8px" }}>
+            {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </div>
+          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "42px", color: T.cream, letterSpacing: "0.05em" }}>
+            {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+          <div style={{ fontSize: "12px", marginTop: "8px" }}>
+            {status === "out" && <span style={{ color: T.textMid }}>Not clocked in</span>}
+            {status === "in" && <span style={{ color: T.green, animation: "pulse 2s infinite" }}>● On the clock · {elapsed(activeEntry?.clockIn)}</span>}
+            {status === "break" && <span style={{ color: T.gold, animation: "pulse 2s infinite" }}>● On break · {elapsed(activeEntry?.breaks?.slice(-1)[0]?.start)}</span>}
+          </div>
+          {activeEntry && (
+            <div style={{ marginTop: "10px", fontSize: "12px", color: T.textMid }}>
+              Shift started {formatTime(activeEntry.clockIn)}
+              {breakMins > 0 && ` · ${breakMins}min break`}
+            </div>
+          )}
+        </Card>
+
+        {/* Geo status */}
+        {geoStatus && (
+          <div style={{ marginBottom: "12px", padding: "10px 14px", borderRadius: "8px", background: geoOk === false ? `${T.rose}15` : `${T.green}15`, border: `1px solid ${geoOk === false ? T.rose : T.green}44`, fontSize: "13px", color: geoOk === false ? T.rose : T.green }}>
+            <Icon d={ICONS.location} size={13} color={geoOk === false ? T.rose : T.green} /> {geoStatus}
+          </div>
+        )}
+
+        {/* Success msg */}
+        {msg && (
+          <div style={{ marginBottom: "12px", padding: "10px 14px", borderRadius: "8px", background: `${T.green}15`, border: `1px solid ${T.green}44`, fontSize: "13px", color: T.green }}>
+            ✓ {msg}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {status === "out" && (
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "12px", color: T.textMid, marginBottom: "10px", letterSpacing: "0.08em" }}>SELECT EVENT TO CLOCK IN</div>
+            {data.events.map(event => (
+              <Card key={event.id} style={{ marginBottom: "8px", cursor: "pointer" }} onClick={() => clockIn(event)}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ color: T.cream, fontSize: "14px" }}>{event.name}</div>
+                    <div style={{ color: T.textMid, fontSize: "12px" }}>{event.venue} · {event.date}</div>
+                  </div>
+                  <Btn small><Icon d={ICONS.clock} size={13} color={T.bg} /> Clock In</Btn>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {status === "in" && (
+          <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+            <Btn onClick={startBreak} variant="warning" style={{ flex: 1 }}>
+              <Icon d={ICONS.coffee} size={14} color={T.gold} /> Start Break
+            </Btn>
+            <Btn onClick={clockOut} variant="danger" style={{ flex: 1 }}>
+              <Icon d={ICONS.logout} size={14} color={T.rose} /> Clock Out
+            </Btn>
+          </div>
+        )}
+
+        {status === "break" && (
+          <div style={{ marginBottom: "20px" }}>
+            <Btn onClick={endBreak} variant="success" style={{ width: "100%" }}>
+              <Icon d={ICONS.check} size={14} color={T.green} /> End Break — Resume Shift
+            </Btn>
+          </div>
+        )}
+
+        {/* Recent history */}
+        {myPastEntries.length > 0 && (
+          <div>
+            <div style={{ fontSize: "12px", color: T.textMid, letterSpacing: "0.08em", marginBottom: "10px" }}>RECENT SHIFTS</div>
+            {myPastEntries.map(e => (
+              <Card key={e.id} style={{ marginBottom: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", color: T.cream }}>{e.eventName}</div>
+                    <div style={{ fontSize: "11px", color: T.textMid }}>{new Date(e.clockIn).toLocaleDateString()} · {formatTime(e.clockIn)} – {formatTime(e.clockOut)}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Badge label={`${e.paidHours}h paid`} color={T.green} />
+                    {e.flagged && <div style={{ marginTop: "4px" }}><Badge label="⚠ flagged" color={T.rose} /></div>}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN VIEWS ──────────────────────────────────────────────────────────────
 function Dashboard({ data }) {
   const totalRevenue = data.events.reduce((s, e) => s + (e.revenue || 0), 0);
   const totalProfit = data.events.reduce((s, e) => s + (e.revenue || 0) - (e.inventoryCost || 0) - (e.laborCost || 0), 0);
   const upcoming = data.events.filter(e => new Date(e.date) >= new Date()).length;
   const booked = data.clients.filter(c => c.status === "Booked").length;
-
-  const today = new Date().toISOString().slice(0, 10);
-  const todayEvents = data.events.filter(e => e.date === today);
-  const upcomingEvents = data.events.filter(e => e.date > today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+  const upcomingEvents = data.events.filter(e => e.date > new Date().toISOString().slice(0,10)).sort((a,b) => a.date.localeCompare(b.date)).slice(0,5);
 
   return (
     <div>
@@ -180,20 +497,18 @@ function Dashboard({ data }) {
         <div style={{ fontFamily: "Playfair Display, serif", fontSize: "28px", color: T.cream, marginBottom: "4px" }}>Welcome back</div>
         <div style={{ color: T.textMid, fontSize: "14px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
       </div>
-
       <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "24px" }}>
-        <Stat label="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} sub="all events" />
-        <Stat label="Net Profit" value={`$${totalProfit.toLocaleString()}`} sub={`${Math.round((totalProfit / totalRevenue) * 100) || 0}% margin`} color={T.green} />
-        <Stat label="Upcoming Events" value={upcoming} sub="scheduled" color={T.blue} />
-        <Stat label="Active Clients" value={booked} sub="booked" color={T.rose} />
+        <Stat label="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} />
+        <Stat label="Net Profit" value={`$${totalProfit.toLocaleString()}`} sub={`${Math.round((totalProfit/totalRevenue)*100)||0}% margin`} color={T.green} />
+        <Stat label="Upcoming" value={upcoming} color={T.blue} />
+        <Stat label="Booked Clients" value={booked} color={T.rose} />
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
         <Card>
           <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>Pipeline</div>
-          {["Lead", "Consult", "Booked", "Completed"].map(s => {
+          {["Lead","Consult","Booked","Completed"].map(s => {
             const count = data.clients.filter(c => c.status === s).length;
-            const pct = data.clients.length ? (count / data.clients.length) * 100 : 0;
+            const pct = data.clients.length ? (count/data.clients.length)*100 : 0;
             return (
               <div key={s} style={{ marginBottom: "10px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
@@ -201,13 +516,12 @@ function Dashboard({ data }) {
                   <span style={{ fontSize: "12px", color: T.text }}>{count}</span>
                 </div>
                 <div style={{ height: "4px", background: T.border, borderRadius: "2px" }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: T.gold, borderRadius: "2px", transition: "width 0.5s" }} />
+                  <div style={{ height: "100%", width: `${pct}%`, background: T.gold, borderRadius: "2px" }} />
                 </div>
               </div>
             );
           })}
         </Card>
-
         <Card>
           <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>Upcoming Events</div>
           {upcomingEvents.length === 0 && <div style={{ color: T.textMid, fontSize: "13px" }}>No upcoming events</div>}
@@ -226,15 +540,7 @@ function Dashboard({ data }) {
           })}
         </Card>
       </div>
-
-      {todayEvents.length > 0 && (
-        <Card style={{ borderColor: T.gold, background: `${T.gold}08` }}>
-          <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", marginBottom: "10px" }}>TODAY'S EVENTS</div>
-          {todayEvents.map(e => <div key={e.id} style={{ color: T.cream, fontSize: "14px" }}>🎉 {e.name} · {e.venue}</div>)}
-        </Card>
-      )}
-
-      <Card style={{ marginTop: "16px" }}>
+      <Card>
         <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>Inventory Alerts</div>
         {data.inventory.filter(i => i.reserved >= i.qty * 0.85).map(i => (
           <div key={i.id} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -243,9 +549,7 @@ function Dashboard({ data }) {
             <span style={{ fontSize: "12px", color: T.rose }}>{i.qty - i.reserved} remaining</span>
           </div>
         ))}
-        {data.inventory.filter(i => i.reserved >= i.qty * 0.85).length === 0 && (
-          <div style={{ color: T.green, fontSize: "13px" }}>✓ All inventory levels healthy</div>
-        )}
+        {data.inventory.filter(i => i.reserved >= i.qty * 0.85).length === 0 && <div style={{ color: T.green, fontSize: "13px" }}>✓ All inventory levels healthy</div>}
       </Card>
     </div>
   );
@@ -253,63 +557,37 @@ function Dashboard({ data }) {
 
 function ClientIntake({ data, setData }) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", eventType: "Wedding", budget: "", style: "Luxury", notes: "" });
-  const [aiResult, setAiResult] = useState("");
-  const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: v }));
 
-  async function handleSubmit() {
-    if (!form.name || !form.email) return;
-    setLoading(true);
-    setAiResult("");
-    const prompt = `New client intake for Frey Events:
-Name: ${form.name}
-Email: ${form.email}
-Event Type: ${form.eventType}
-Budget: $${form.budget}
-Style: ${form.style}
-Notes: ${form.notes}
-
-1. Qualify this lead (High Value / Standard / Low Priority) with a reason.
-2. Write a warm, luxury-brand welcome email (3 sentences max).
-3. List 3 tailored design suggestions for their event.
-Keep total response under 300 words.`;
-    const res = await callAI(prompt);
-    setAiResult(res);
-    setLoading(false);
-  }
-
   async function saveClient() {
+    if (!form.name || !form.email) return;
     const tag = parseInt(form.budget) >= 5000 ? "High Value" : "";
-    const newClient = { id: `c${Date.now()}`, ...form, budget: parseInt(form.budget) || 0, status: "Lead", tag, createdAt: new Date().toISOString().slice(0, 10) };
+    const newClient = { id: `c${Date.now()}`, ...form, budget: parseInt(form.budget) || 0, status: "Lead", tag, createdAt: new Date().toISOString().slice(0,10) };
     const updated = { ...data, clients: [newClient, ...data.clients] };
     setData(updated);
     await save("frey-clients", updated.clients);
     setSaved(true);
     setForm({ name: "", email: "", phone: "", eventType: "Wedding", budget: "", style: "Luxury", notes: "" });
-    setAiResult("");
     setTimeout(() => setSaved(false), 2500);
   }
 
   return (
     <div>
-      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream, marginBottom: "4px" }}>Client Intake</div>
-      <div style={{ color: T.textMid, fontSize: "13px", marginBottom: "24px" }}>Replaces Typeform · AI-powered qualification</div>
-
+      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream, marginBottom: "4px" }}>New Client Intake</div>
+      <div style={{ color: T.textMid, fontSize: "13px", marginBottom: "24px" }}>Add a new client to the pipeline</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
         <Input label="Full Name" value={form.name} onChange={f("name")} placeholder="Jane Smith" />
         <Input label="Email" value={form.email} onChange={f("email")} type="email" placeholder="jane@email.com" />
         <Input label="Phone" value={form.phone} onChange={f("phone")} placeholder="555-0000" />
         <Input label="Budget ($)" value={form.budget} onChange={f("budget")} type="number" placeholder="10000" />
-        <Input label="Event Type" value={form.eventType} onChange={f("eventType")} options={["Wedding", "Corporate", "Birthday", "Baby Shower", "Anniversary", "Other"]} />
-        <Input label="Design Style" value={form.style} onChange={f("style")} options={["Luxury", "Modern", "Boho", "Rustic", "Classic", "Minimalist"]} />
+        <Input label="Event Type" value={form.eventType} onChange={f("eventType")} options={["Wedding","Corporate","Birthday","Baby Shower","Anniversary","Other"]} />
+        <Input label="Design Style" value={form.style} onChange={f("style")} options={["Luxury","Modern","Boho","Rustic","Classic","Minimalist"]} />
       </div>
       <Input label="Notes / Inspiration" value={form.notes} onChange={f("notes")} placeholder="Tell us about the vision…" style={{ marginBottom: "16px" }} />
-
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
         <Btn onClick={saveClient} variant="success"><Icon d={ICONS.check} size={14} color={T.green} /> Save Client</Btn>
-        {saved && <Badge label="✓ Saved!" color={T.green} />}
+        {saved && <Badge label="✓ Client Saved!" color={T.green} />}
       </div>
     </div>
   );
@@ -320,7 +598,6 @@ function Clients({ data, setData }) {
   const [aiMap, setAiMap] = useState({});
   const [loadingId, setLoadingId] = useState(null);
 
-  const statuses = ["All", "Lead", "Consult", "Booked", "Completed"];
   const filtered = filter === "All" ? data.clients : data.clients.filter(c => c.status === filter);
 
   async function advance(client) {
@@ -333,20 +610,19 @@ function Clients({ data, setData }) {
 
   async function generateFollowUp(client) {
     setLoadingId(client.id);
-    const res = await callAI(`Write a professional 2-sentence follow-up message for ${client.name}, a ${client.status} client planning a ${client.eventType} with a $${client.budget} budget in a ${client.style || "luxury"} style. Tone: warm, high-end event planner.`);
+    const res = await callAI(`Write a professional 2-sentence follow-up message for ${client.name}, a ${client.status} client planning a ${client.eventType} with a $${client.budget} budget. Tone: warm, luxury event planner.`);
     setAiMap(p => ({ ...p, [client.id]: res }));
     setLoadingId(null);
   }
 
   return (
     <div>
-      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream, marginBottom: "4px" }}>Clients</div>
+      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream, marginBottom: "16px" }}>Clients</div>
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
-        {statuses.map(s => (
-          <button key={s} onClick={() => setFilter(s)} style={{ padding: "5px 14px", borderRadius: "20px", border: `1px solid ${filter === s ? T.gold : T.border}`, background: filter === s ? `${T.gold}22` : "transparent", color: filter === s ? T.gold : T.textMid, cursor: "pointer", fontSize: "12px", fontFamily: "inherit" }}>{s}</button>
+        {["All","Lead","Consult","Booked","Completed"].map(s => (
+          <button key={s} onClick={() => setFilter(s)} style={{ padding: "5px 14px", borderRadius: "20px", border: `1px solid ${filter===s?T.gold:T.border}`, background: filter===s?`${T.gold}22`:"transparent", color: filter===s?T.gold:T.textMid, cursor: "pointer", fontSize: "12px", fontFamily: "inherit" }}>{s}</button>
         ))}
       </div>
-
       {filtered.map(c => (
         <Card key={c.id} style={{ marginBottom: "12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px" }}>
@@ -360,19 +636,11 @@ function Clients({ data, setData }) {
               <div style={{ fontSize: "12px", color: T.textMid }}>{c.eventType} · ${c.budget?.toLocaleString()} budget · Added {c.createdAt}</div>
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <Btn small variant="ghost" onClick={() => generateFollowUp(c)}>
-                {loadingId === c.id ? "…" : "✦ Follow-up"}
-              </Btn>
-              {c.status !== "Completed" && (
-                <Btn small onClick={() => advance(c)}>Advance →</Btn>
-              )}
+              <Btn small variant="ghost" onClick={() => generateFollowUp(c)}>{loadingId===c.id?"…":"✦ Follow-up"}</Btn>
+              {c.status !== "Completed" && <Btn small onClick={() => advance(c)}>Advance →</Btn>}
             </div>
           </div>
-          {aiMap[c.id] && (
-            <div style={{ marginTop: "10px", padding: "10px", background: `${T.gold}0d`, borderRadius: "6px", fontSize: "13px", color: T.cream, borderLeft: `2px solid ${T.gold}` }}>
-              {aiMap[c.id]}
-            </div>
-          )}
+          {aiMap[c.id] && <div style={{ marginTop: "10px", padding: "10px", background: `${T.gold}0d`, borderRadius: "6px", fontSize: "13px", color: T.cream, borderLeft: `2px solid ${T.gold}` }}>{aiMap[c.id]}</div>}
         </Card>
       ))}
     </div>
@@ -381,37 +649,25 @@ function Clients({ data, setData }) {
 
 function Events({ data, setData }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ clientId: "", name: "", date: "", venue: "", guests: "", style: "Luxury", revenue: "", inventoryCost: "", laborCost: "" });
+  const [form, setForm] = useState({ clientId: "", name: "", date: "", venue: "", venueLat: "", venueLng: "", guests: "", style: "Luxury", revenue: "", inventoryCost: "", laborCost: "" });
   const [briefing, setBriefing] = useState({});
   const [loadingId, setLoadingId] = useState(null);
-
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: v }));
 
   async function addEvent() {
-    const e = { id: `e${Date.now()}`, ...form, guests: parseInt(form.guests) || 0, revenue: parseFloat(form.revenue) || 0, inventoryCost: parseFloat(form.inventoryCost) || 0, laborCost: parseFloat(form.laborCost) || 0, status: "Booked" };
+    const e = { id: `e${Date.now()}`, ...form, guests: parseInt(form.guests)||0, revenue: parseFloat(form.revenue)||0, inventoryCost: parseFloat(form.inventoryCost)||0, laborCost: parseFloat(form.laborCost)||0, venueLat: parseFloat(form.venueLat)||null, venueLng: parseFloat(form.venueLng)||null, status: "Booked" };
     const updated = { ...data, events: [e, ...data.events] };
     setData(updated);
     await save("frey-events", updated.events);
     setShowAdd(false);
-    setForm({ clientId: "", name: "", date: "", venue: "", guests: "", style: "Luxury", revenue: "", inventoryCost: "", laborCost: "" });
   }
 
   async function generateBriefing(event) {
     setLoadingId(event.id);
     const client = data.clients.find(c => c.id === event.clientId);
     const shifts = data.shifts.filter(s => s.eventId === event.id);
-    const staffNames = shifts.map(s => { const st = data.staff.find(x => x.id === s.staffId); return st ? `${st.name} (${s.role}, ${s.hours}h)` : ""; }).join(", ");
-    const prompt = `Generate a day-of event briefing for Frey Events staff:
-Event: ${event.name}
-Client: ${client?.name || "N/A"}
-Date: ${event.date}
-Venue: ${event.venue}
-Guests: ${event.guests}
-Style: ${event.style}
-Staff on duty: ${staffNames || "TBD"}
-
-Include: timeline overview, setup priorities, styling notes, staff assignments, and 2 key reminders. Keep it under 250 words, practical and actionable.`;
-    const res = await callAI(prompt);
+    const staffNames = shifts.map(s => { const st = data.staff.find(x => x.id === s.staffId); return st ? `${st.name} (${s.role})` : ""; }).join(", ");
+    const res = await callAI(`Generate a day-of event briefing for: ${event.name}, Client: ${client?.name||"N/A"}, Date: ${event.date}, Venue: ${event.venue}, Guests: ${event.guests}, Style: ${event.style}, Staff: ${staffNames||"TBD"}. Include timeline, setup priorities, styling notes, staff assignments, 2 key reminders. Under 250 words.`);
     setBriefing(p => ({ ...p, [event.id]: res }));
     setLoadingId(null);
   }
@@ -419,25 +675,19 @@ Include: timeline overview, setup priorities, styling notes, staff assignments, 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <div>
-          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Events</div>
-          <div style={{ color: T.textMid, fontSize: "13px" }}>Replaces Monday.com · Full event management</div>
-        </div>
+        <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Events</div>
         <Btn onClick={() => setShowAdd(p => !p)}><Icon d={ICONS.plus} size={14} color={T.bg} /> New Event</Btn>
       </div>
-
       {showAdd && (
         <Card style={{ marginBottom: "16px", borderColor: T.goldDim }}>
-          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "16px", color: T.gold, marginBottom: "14px" }}>Add Event</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-            <Input label="Client" value={form.clientId} onChange={f("clientId")} options={["", ...data.clients.map(c => c.id)]}
-              // override to show name
-            />
             <Input label="Event Name" value={form.name} onChange={f("name")} placeholder="Reinholt Wedding" />
             <Input label="Date" value={form.date} onChange={f("date")} type="date" />
             <Input label="Venue" value={form.venue} onChange={f("venue")} placeholder="Grand Pavilion" />
             <Input label="Guests" value={form.guests} onChange={f("guests")} type="number" />
-            <Input label="Style" value={form.style} onChange={f("style")} options={["Luxury", "Modern", "Boho", "Rustic", "Classic"]} />
+            <Input label="Venue Latitude (optional)" value={form.venueLat} onChange={f("venueLat")} placeholder="44.9778" />
+            <Input label="Venue Longitude (optional)" value={form.venueLng} onChange={f("venueLng")} placeholder="-93.2650" />
+            <Input label="Style" value={form.style} onChange={f("style")} options={["Luxury","Modern","Boho","Rustic","Classic"]} />
             <Input label="Revenue ($)" value={form.revenue} onChange={f("revenue")} type="number" />
             <Input label="Inventory Cost ($)" value={form.inventoryCost} onChange={f("inventoryCost")} type="number" />
             <Input label="Labor Cost ($)" value={form.laborCost} onChange={f("laborCost")} type="number" />
@@ -448,11 +698,10 @@ Include: timeline overview, setup priorities, styling notes, staff assignments, 
           </div>
         </Card>
       )}
-
       {data.events.map(e => {
         const client = data.clients.find(c => c.id === e.clientId);
-        const profit = (e.revenue || 0) - (e.inventoryCost || 0) - (e.laborCost || 0);
-        const margin = e.revenue ? Math.round((profit / e.revenue) * 100) : 0;
+        const profit = (e.revenue||0) - (e.inventoryCost||0) - (e.laborCost||0);
+        const margin = e.revenue ? Math.round((profit/e.revenue)*100) : 0;
         const days = Math.ceil((new Date(e.date) - new Date()) / 86400000);
         return (
           <Card key={e.id} style={{ marginBottom: "12px" }}>
@@ -463,34 +712,19 @@ Include: timeline overview, setup priorities, styling notes, staff assignments, 
                   <StatusBadge status={e.status} />
                   <Badge label={e.style} color={T.blue} />
                 </div>
-                <div style={{ fontSize: "12px", color: T.textMid }}>
-                  {client?.name} · {e.venue} · {e.guests} guests · {e.date}
-                  {days > 0 && <span style={{ color: days < 14 ? T.rose : T.textMid }}> ({days} days away)</span>}
-                </div>
+                <div style={{ fontSize: "12px", color: T.textMid }}>{client?.name} · {e.venue} · {e.guests} guests · {e.date} {days > 0 && <span style={{ color: days < 14 ? T.rose : T.textMid }}>({days}d away)</span>}</div>
               </div>
-              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: "16px", color: T.green, fontWeight: 700 }}>${profit.toLocaleString()}</div>
                   <div style={{ fontSize: "11px", color: T.textMid }}>{margin}% margin</div>
                 </div>
-                <Btn small onClick={() => generateBriefing(e)}>
-                  {loadingId === e.id ? "…" : "✦ Briefing"}
-                </Btn>
+                <Btn small onClick={() => generateBriefing(e)}>{loadingId===e.id?"…":"✦ Briefing"}</Btn>
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: "20px", marginTop: "10px", paddingTop: "10px", borderTop: `1px solid ${T.border}` }}>
-              {[["Revenue", e.revenue, T.green], ["Inventory", e.inventoryCost, T.rose], ["Labor", e.laborCost, T.blue]].map(([l, v, c]) => (
-                <div key={l}>
-                  <div style={{ fontSize: "10px", color: T.textMid, letterSpacing: "0.08em" }}>{l.toUpperCase()}</div>
-                  <div style={{ fontSize: "14px", color: c }}>${(v || 0).toLocaleString()}</div>
-                </div>
-              ))}
-            </div>
-
             {briefing[e.id] && (
               <div style={{ marginTop: "12px", padding: "12px", background: `${T.gold}0a`, borderRadius: "8px", borderLeft: `2px solid ${T.gold}` }}>
-                <div style={{ fontSize: "11px", color: T.gold, fontWeight: 700, marginBottom: "6px", letterSpacing: "0.08em" }}>DAY-OF BRIEFING</div>
+                <div style={{ fontSize: "11px", color: T.gold, fontWeight: 700, marginBottom: "6px" }}>DAY-OF BRIEFING</div>
                 <div style={{ fontSize: "13px", color: T.cream, whiteSpace: "pre-wrap", lineHeight: "1.6" }}>{briefing[e.id]}</div>
               </div>
             )}
@@ -507,7 +741,7 @@ function Inventory({ data, setData }) {
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: v }));
 
   async function addItem() {
-    const item = { id: `i${Date.now()}`, ...form, qty: parseInt(form.qty) || 0, reserved: parseInt(form.reserved) || 0 };
+    const item = { id: `i${Date.now()}`, ...form, qty: parseInt(form.qty)||0, reserved: parseInt(form.reserved)||0 };
     const updated = { ...data, inventory: [...data.inventory, item] };
     setData(updated);
     await save("frey-inventory", updated.inventory);
@@ -520,18 +754,14 @@ function Inventory({ data, setData }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <div>
-          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Inventory</div>
-          <div style={{ color: T.textMid, fontSize: "13px" }}>Replaces Airtable inventory base</div>
-        </div>
+        <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Inventory</div>
         <Btn onClick={() => setShowAdd(p => !p)}><Icon d={ICONS.plus} size={14} color={T.bg} /> Add Item</Btn>
       </div>
-
       {showAdd && (
         <Card style={{ marginBottom: "16px", borderColor: T.goldDim }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
             <Input label="Item Name" value={form.name} onChange={f("name")} placeholder="Chiavari Chairs" />
-            <Input label="Category" value={form.category} onChange={f("category")} options={["Seating", "Tables", "Lighting", "Decor", "Linens", "Other"]} />
+            <Input label="Category" value={form.category} onChange={f("category")} options={["Seating","Tables","Lighting","Decor","Linens","Other"]} />
             <Input label="Total Qty" value={form.qty} onChange={f("qty")} type="number" />
             <Input label="Reserved" value={form.reserved} onChange={f("reserved")} type="number" />
           </div>
@@ -541,13 +771,12 @@ function Inventory({ data, setData }) {
           </div>
         </Card>
       )}
-
       {categories.map(cat => (
         <div key={cat} style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "11px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>{cat}</div>
           {data.inventory.filter(i => i.category === cat).map(i => {
             const avail = i.qty - i.reserved;
-            const pct = Math.min(100, (i.reserved / i.qty) * 100);
+            const pct = Math.min(100, (i.reserved/i.qty)*100);
             const alert = pct >= 85;
             return (
               <Card key={i.id} style={{ marginBottom: "8px", borderColor: alert ? `${T.rose}44` : T.border }}>
@@ -555,12 +784,12 @@ function Inventory({ data, setData }) {
                   <span style={{ color: T.cream, fontSize: "14px" }}>{i.name}</span>
                   <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                     {alert && <Icon d={ICONS.alert} size={14} color={T.rose} />}
-                    <span style={{ fontSize: "12px", color: T.textMid }}>{i.reserved}/{i.qty} reserved</span>
+                    <span style={{ fontSize: "12px", color: T.textMid }}>{i.reserved}/{i.qty}</span>
                     <Badge label={`${avail} avail`} color={alert ? T.rose : T.green} />
                   </div>
                 </div>
                 <div style={{ height: "4px", background: T.border, borderRadius: "2px" }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: alert ? T.rose : T.green, borderRadius: "2px", transition: "width 0.5s" }} />
+                  <div style={{ height: "100%", width: `${pct}%`, background: alert ? T.rose : T.green, borderRadius: "2px" }} />
                 </div>
               </Card>
             );
@@ -573,34 +802,34 @@ function Inventory({ data, setData }) {
 
 function Staff({ data, setData }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", role: "", rate: "" });
+  const [form, setForm] = useState({ name: "", role: "Setup Crew", rate: "", pin: "" });
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: v }));
 
   async function addStaff() {
-    const s = { id: `s${Date.now()}`, ...form, rate: parseFloat(form.rate) || 0 };
+    const s = { id: `s${Date.now()}`, ...form, rate: parseFloat(form.rate)||0 };
     const updated = { ...data, staff: [...data.staff, s] };
     setData(updated);
     await save("frey-staff", updated.staff);
     setShowAdd(false);
-    setForm({ name: "", role: "", rate: "" });
+    setForm({ name: "", role: "Setup Crew", rate: "", pin: "" });
   }
+
+  // Clock entries summary per staff
+  const entries = data.clockEntries || [];
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <div>
-          <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Staff & Labor</div>
-          <div style={{ color: T.textMid, fontSize: "13px" }}>Replaces Clockify + team management</div>
-        </div>
+        <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream }}>Staff & Labor</div>
         <Btn onClick={() => setShowAdd(p => !p)}><Icon d={ICONS.plus} size={14} color={T.bg} /> Add Staff</Btn>
       </div>
-
       {showAdd && (
         <Card style={{ marginBottom: "16px", borderColor: T.goldDim }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
             <Input label="Name" value={form.name} onChange={f("name")} placeholder="Jordan Lee" />
-            <Input label="Role" value={form.role} onChange={f("role")} options={["Lead Coordinator", "Floral Designer", "Setup Crew", "Breakdown Crew", "Photographer", "Other"]} />
+            <Input label="Role" value={form.role} onChange={f("role")} options={["Lead Coordinator","Floral Designer","Setup Crew","Breakdown Crew","Photographer","Other"]} />
             <Input label="Hourly Rate ($)" value={form.rate} onChange={f("rate")} type="number" />
+            <Input label="PIN (4 digits)" value={form.pin} onChange={f("pin")} placeholder="1234" type="password" />
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <Btn onClick={addStaff}>Save</Btn>
@@ -609,49 +838,50 @@ function Staff({ data, setData }) {
         </Card>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px", marginBottom: "24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px", marginBottom: "24px" }}>
         {data.staff.map(s => {
-          const shifts = data.shifts.filter(sh => sh.staffId === s.id);
-          const totalHours = shifts.reduce((sum, sh) => sum + (sh.hours || 0), 0);
+          const staffEntries = entries.filter(e => e.staffId === s.id && e.paidHours);
+          const totalHours = staffEntries.reduce((sum, e) => sum + (e.paidHours||0), 0);
+          const flagged = entries.filter(e => e.staffId === s.id && e.flagged).length;
           return (
             <Card key={s.id}>
               <div style={{ fontFamily: "Playfair Display, serif", fontSize: "15px", color: T.cream, marginBottom: "4px" }}>{s.name}</div>
-              <Badge label={s.role} color={T.blue} />
-              <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: "10px", color: T.textMid, letterSpacing: "0.08em" }}>RATE</div>
-                  <div style={{ fontSize: "14px", color: T.gold }}>${s.rate}/hr</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: "10px", color: T.textMid, letterSpacing: "0.08em" }}>HOURS</div>
-                  <div style={{ fontSize: "14px", color: T.cream }}>{totalHours}h</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: "10px", color: T.textMid, letterSpacing: "0.08em" }}>EARNED</div>
-                  <div style={{ fontSize: "14px", color: T.green }}>${(totalHours * s.rate).toLocaleString()}</div>
-                </div>
+              <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
+                <Badge label={s.role} color={T.blue} />
+                {flagged > 0 && <Badge label={`${flagged} flagged`} color={T.rose} />}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div><div style={{ fontSize: "10px", color: T.textMid }}>RATE</div><div style={{ fontSize: "14px", color: T.gold }}>${s.rate}/hr</div></div>
+                <div><div style={{ fontSize: "10px", color: T.textMid }}>HOURS</div><div style={{ fontSize: "14px", color: T.cream }}>{totalHours.toFixed(1)}h</div></div>
+                <div><div style={{ fontSize: "10px", color: T.textMid }}>EARNED</div><div style={{ fontSize: "14px", color: T.green }}>${(totalHours * s.rate).toFixed(0)}</div></div>
               </div>
             </Card>
           );
         })}
       </div>
 
-      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "18px", color: T.cream, marginBottom: "14px" }}>Shift Log</div>
-      {data.shifts.map(sh => {
-        const staff = data.staff.find(s => s.id === sh.staffId);
-        const event = data.events.find(e => e.id === sh.eventId);
-        const cost = (sh.hours || 0) * (staff?.rate || 0);
+      {/* Clock entries log */}
+      <div style={{ fontFamily: "Playfair Display, serif", fontSize: "18px", color: T.cream, marginBottom: "14px" }}>Clock Entries</div>
+      {entries.length === 0 && <div style={{ color: T.textMid, fontSize: "13px" }}>No clock entries yet — staff will appear here when they clock in.</div>}
+      {entries.slice().reverse().map(e => {
+        const st = data.staff.find(s => s.id === e.staffId);
+        const breakMins = (e.breaks||[]).reduce((sum,b) => b.start&&b.end ? sum+Math.round((new Date(b.end)-new Date(b.start))/60000) : sum, 0);
         return (
-          <Card key={sh.id} style={{ marginBottom: "8px" }}>
+          <Card key={e.id} style={{ marginBottom: "8px", borderColor: e.flagged ? `${T.rose}44` : T.border }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <span style={{ color: T.cream, fontSize: "14px" }}>{staff?.name}</span>
-                <span style={{ color: T.textMid, fontSize: "12px", marginLeft: "10px" }}>{event?.name} · {sh.role}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ color: T.cream, fontSize: "14px" }}>{st?.name || e.staffName}</span>
+                  {e.flagged && <Badge label="⚠ Location flagged" color={T.rose} />}
+                  {!e.clockOut && <Badge label="● Active" color={T.green} />}
+                </div>
+                <div style={{ fontSize: "11px", color: T.textMid }}>
+                  {e.eventName} · {new Date(e.clockIn).toLocaleDateString()} · In: {new Date(e.clockIn).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                  {e.clockOut && ` · Out: ${new Date(e.clockOut).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}`}
+                  {breakMins > 0 && ` · ${breakMins}min break`}
+                </div>
               </div>
-              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", color: T.textMid }}>{sh.start}–{sh.end} ({sh.hours}h)</span>
-                <Badge label={`$${cost}`} color={T.green} />
-              </div>
+              {e.paidHours && <Badge label={`${e.paidHours}h paid`} color={T.green} />}
             </div>
           </Card>
         );
@@ -662,42 +892,40 @@ function Staff({ data, setData }) {
 
 function Finance({ data }) {
   const events = data.events;
-  const totalRevenue = events.reduce((s, e) => s + (e.revenue || 0), 0);
-  const totalInventory = events.reduce((s, e) => s + (e.inventoryCost || 0), 0);
-  const totalLabor = events.reduce((s, e) => s + (e.laborCost || 0), 0);
+  const totalRevenue = events.reduce((s, e) => s + (e.revenue||0), 0);
+  const totalInventory = events.reduce((s, e) => s + (e.inventoryCost||0), 0);
+  const totalLabor = events.reduce((s, e) => s + (e.laborCost||0), 0);
   const totalProfit = totalRevenue - totalInventory - totalLabor;
-  const margin = totalRevenue ? Math.round((totalProfit / totalRevenue) * 100) : 0;
+  const margin = totalRevenue ? Math.round((totalProfit/totalRevenue)*100) : 0;
 
   return (
     <div>
       <div style={{ fontFamily: "Playfair Display, serif", fontSize: "22px", color: T.cream, marginBottom: "4px" }}>Financials</div>
-      <div style={{ color: T.textMid, fontSize: "13px", marginBottom: "24px" }}>Replaces QuickBooks · Profit per event</div>
-
+      <div style={{ color: T.textMid, fontSize: "13px", marginBottom: "24px" }}>Profit per event</div>
       <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "24px" }}>
         <Stat label="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} color={T.green} />
         <Stat label="Inventory Costs" value={`$${totalInventory.toLocaleString()}`} color={T.rose} />
         <Stat label="Labor Costs" value={`$${totalLabor.toLocaleString()}`} color={T.blue} />
         <Stat label="Net Profit" value={`$${totalProfit.toLocaleString()}`} sub={`${margin}% margin`} color={T.gold} />
       </div>
-
       <Card>
-        <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>Event P&L Breakdown</div>
+        <div style={{ fontSize: "12px", color: T.gold, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>Event P&L</div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr", gap: "8px", marginBottom: "10px" }}>
-          {["Event", "Revenue", "Inventory", "Labor", "Profit", "Margin"].map(h => (
+          {["Event","Revenue","Inventory","Labor","Profit","Margin"].map(h => (
             <div key={h} style={{ fontSize: "10px", color: T.textMid, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>{h}</div>
           ))}
         </div>
         {events.map(e => {
-          const p = (e.revenue || 0) - (e.inventoryCost || 0) - (e.laborCost || 0);
-          const m = e.revenue ? Math.round((p / e.revenue) * 100) : 0;
+          const p = (e.revenue||0)-(e.inventoryCost||0)-(e.laborCost||0);
+          const m = e.revenue ? Math.round((p/e.revenue)*100) : 0;
           return (
             <div key={e.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr", gap: "8px", padding: "10px 0", borderTop: `1px solid ${T.border}` }}>
               <div style={{ fontSize: "13px", color: T.cream }}>{e.name}</div>
-              <div style={{ fontSize: "13px", color: T.green }}>${(e.revenue || 0).toLocaleString()}</div>
-              <div style={{ fontSize: "13px", color: T.rose }}>${(e.inventoryCost || 0).toLocaleString()}</div>
-              <div style={{ fontSize: "13px", color: T.blue }}>${(e.laborCost || 0).toLocaleString()}</div>
-              <div style={{ fontSize: "13px", color: p >= 0 ? T.green : T.rose }}>${p.toLocaleString()}</div>
-              <div><Badge label={`${m}%`} color={m >= 40 ? T.green : m >= 20 ? T.gold : T.rose} /></div>
+              <div style={{ fontSize: "13px", color: T.green }}>${(e.revenue||0).toLocaleString()}</div>
+              <div style={{ fontSize: "13px", color: T.rose }}>${(e.inventoryCost||0).toLocaleString()}</div>
+              <div style={{ fontSize: "13px", color: T.blue }}>${(e.laborCost||0).toLocaleString()}</div>
+              <div style={{ fontSize: "13px", color: p>=0?T.green:T.rose }}>${p.toLocaleString()}</div>
+              <div><Badge label={`${m}%`} color={m>=40?T.green:m>=20?T.gold:T.rose} /></div>
             </div>
           );
         })}
@@ -716,6 +944,7 @@ function Finance({ data }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function FreyEventsSystem() {
+  const [auth, setAuth] = useState(null); // null | { role: "admin" | "staff", user: staffObj | null }
   const [view, setView] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [data, setData] = useState(SEED);
@@ -728,17 +957,32 @@ export default function FreyEventsSystem() {
       const inventory = await load("frey-inventory");
       const staff = await load("frey-staff");
       const shifts = await load("frey-shifts");
+      const clockEntries = await load("frey-clockentries");
       setData({
         clients: clients || SEED.clients,
         events: events || SEED.events,
         inventory: inventory || SEED.inventory,
         staff: staff || SEED.staff,
         shifts: shifts || SEED.shifts,
+        clockEntries: clockEntries || [],
       });
       setLoaded(true);
     })();
   }, []);
 
+  function handleLogin(role, user) { setAuth({ role, user }); }
+  function handleLogout() { setAuth(null); }
+
+  if (!loaded) return (
+    <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Playfair Display, serif", color: T.gold, fontSize: "22px" }}>
+      Loading Frey Events…
+    </div>
+  );
+
+  if (!auth) return <LoginScreen onLogin={handleLogin} staff={data.staff} />;
+  if (auth.role === "staff") return <ClockView staffMember={auth.user} data={data} setData={setData} onLogout={handleLogout} />;
+
+  // Admin dashboard
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: ICONS.dashboard },
     { id: "intake", label: "Intake", icon: ICONS.intake },
@@ -748,15 +992,8 @@ export default function FreyEventsSystem() {
     { id: "staff", label: "Staff", icon: ICONS.staff },
     { id: "finance", label: "Finance", icon: ICONS.finance },
   ];
-
   const views = { dashboard: Dashboard, intake: ClientIntake, clients: Clients, events: Events, inventory: Inventory, staff: Staff, finance: Finance };
   const ViewComponent = views[view];
-
-  if (!loaded) return (
-    <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Playfair Display, serif", color: T.gold, fontSize: "22px" }}>
-      Loading Frey Events…
-    </div>
-  );
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: T.text }}>
@@ -765,52 +1002,42 @@ export default function FreyEventsSystem() {
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: ${T.bg}; } ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 2px; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         select option { background: ${T.surface}; }
       `}</style>
 
       {/* Sidebar */}
       <div style={{ width: sidebarOpen ? "220px" : "60px", background: T.surface, borderRight: `1px solid ${T.border}`, transition: "width 0.3s", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10, flexShrink: 0 }}>
         <div style={{ padding: sidebarOpen ? "24px 20px 20px" : "24px 14px 20px", borderBottom: `1px solid ${T.border}` }}>
-          {sidebarOpen ? (
-            <div style={{ fontFamily: "Playfair Display, serif", fontSize: "17px", color: T.gold, letterSpacing: "0.05em" }}>
-              ✦ Frey Events
-            </div>
-          ) : (
-            <div style={{ color: T.gold, fontSize: "18px", textAlign: "center" }}>✦</div>
-          )}
+          {sidebarOpen ? <div style={{ fontFamily: "Playfair Display, serif", fontSize: "17px", color: T.gold }}>✦ Frey Events</div> : <div style={{ color: T.gold, fontSize: "18px", textAlign: "center" }}>✦</div>}
         </div>
-
         <nav style={{ flex: 1, padding: "12px 0" }}>
           {nav.map(item => (
-            <button key={item.id} onClick={() => setView(item.id)} style={{
-              width: "100%", padding: sidebarOpen ? "10px 20px" : "10px 0", display: "flex", alignItems: "center", gap: "12px", background: view === item.id ? `${T.gold}15` : "transparent",
-              border: "none", cursor: "pointer", color: view === item.id ? T.gold : T.textMid, fontFamily: "inherit", fontSize: "13px", fontWeight: view === item.id ? 600 : 400,
-              borderLeft: view === item.id ? `2px solid ${T.gold}` : "2px solid transparent", transition: "all 0.2s", justifyContent: sidebarOpen ? "flex-start" : "center",
-            }}>
-              <Icon d={item.icon} size={16} color={view === item.id ? T.gold : T.textMid} />
+            <button key={item.id} onClick={() => setView(item.id)} style={{ width: "100%", padding: sidebarOpen ? "10px 20px" : "10px 0", display: "flex", alignItems: "center", gap: "12px", background: view===item.id ? `${T.gold}15` : "transparent", border: "none", cursor: "pointer", color: view===item.id ? T.gold : T.textMid, fontFamily: "inherit", fontSize: "13px", fontWeight: view===item.id ? 600 : 400, borderLeft: view===item.id ? `2px solid ${T.gold}` : "2px solid transparent", transition: "all 0.2s", justifyContent: sidebarOpen ? "flex-start" : "center" }}>
+              <Icon d={item.icon} size={16} color={view===item.id ? T.gold : T.textMid} />
               {sidebarOpen && item.label}
             </button>
           ))}
         </nav>
-
-        <button onClick={() => setSidebarOpen(p => !p)} style={{ margin: "12px", padding: "8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: "6px", cursor: "pointer", color: T.textMid, fontFamily: "inherit", fontSize: "12px" }}>
-          {sidebarOpen ? "← Collapse" : "→"}
-        </button>
+        <div style={{ padding: "12px" }}>
+          <button onClick={handleLogout} style={{ width: "100%", padding: "8px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: "6px", cursor: "pointer", color: T.rose, fontFamily: "inherit", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <Icon d={ICONS.logout} size={13} color={T.rose} />{sidebarOpen && "Logout"}
+          </button>
+          <button onClick={() => setSidebarOpen(p => !p)} style={{ width: "100%", marginTop: "6px", padding: "8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: "6px", cursor: "pointer", color: T.textMid, fontFamily: "inherit", fontSize: "12px" }}>
+            {sidebarOpen ? "← Collapse" : "→"}
+          </button>
+        </div>
       </div>
 
-      {/* Main content */}
+      {/* Main */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {/* Top bar */}
         <div style={{ padding: "16px 28px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: `${T.bg}ee`, backdropFilter: "blur(8px)", zIndex: 5 }}>
-          <div style={{ fontSize: "12px", color: T.textMid, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {nav.find(n => n.id === view)?.label}
-          </div>
+          <div style={{ fontSize: "12px", color: T.textMid, letterSpacing: "0.08em", textTransform: "uppercase" }}>{nav.find(n => n.id === view)?.label}</div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <Badge label={`${data.clients.length} clients`} color={T.textMid} />
             <Badge label={`${data.events.length} events`} color={T.gold} />
           </div>
         </div>
-
         <div style={{ padding: "28px", maxWidth: "960px", margin: "0 auto" }}>
           <ViewComponent data={data} setData={setData} />
         </div>

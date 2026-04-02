@@ -49,8 +49,8 @@ const SEED = {
     { id: "c3", name: "Priya Nair", email: "priya@email.com", phone: "555-0303", eventType: "Birthday", budget: 3200, status: "Lead", tag: "", createdAt: "2025-05-22" },
   ],
   events: [
-    { id: "e1", clientId: "c1", name: "Reinholt Wedding", date: "2025-08-15", venue: "The Grand Pavilion", venueLat: 44.9778, venueLng: -93.2650, guests: 180, style: "Luxury", status: "Booked", revenue: 18000, inventoryCost: 4200, laborCost: 3100 },
-    { id: "e2", clientId: "c2", name: "Teel Corp Gala", date: "2025-07-22", venue: "Rooftop 54", venueLat: 44.9800, venueLng: -93.2700, guests: 90, style: "Modern", status: "Consult", revenue: 7500, inventoryCost: 1800, laborCost: 1400 },
+    { id: "e1", clientId: "c1", name: "Reinholt Wedding", date: "2025-08-15", venue: "The Grand Pavilion", venueStreet: "2728 N Hamlin Ave", venueCity: "Chicago", venueState: "IL", venueZip: "60647", guests: 180, style: "Luxury", status: "Booked", revenue: 18000, inventoryCost: 4200, laborCost: 3100 },
+    { id: "e2", clientId: "c2", name: "Teel Corp Gala", date: "2025-07-22", venue: "Rooftop 54", venueStreet: "54 W 54th St", venueCity: "New York", venueState: "NY", venueZip: "10019", guests: 90, style: "Modern", status: "Consult", revenue: 7500, inventoryCost: 1800, laborCost: 1400 },
   ],
   inventory: [
     { id: "i1", name: "Chiavari Chairs", category: "Seating", qty: 300, reserved: 180 },
@@ -255,11 +255,19 @@ function ClockView({ staffMember, data, setData, onLogout }) {
   }
 
   async function checkGeo(event) {
-    if (!event?.venueLat) { setGeoOk(true); setGeoStatus("No venue location set — check-in recorded"); return true; }
+    if (!event?.venueStreet && !event?.venueCity) { setGeoOk(true); setGeoStatus("No venue address set — check-in recorded"); return true; }
     try {
       setGeoStatus("Getting your location…");
       const pos = await getLocation();
-      const dist = getDistanceMeters(pos.coords.latitude, pos.coords.longitude, event.venueLat, event.venueLng);
+      setGeoStatus("Verifying venue location…");
+      const addr = [event.venueStreet, event.venueCity, event.venueState, event.venueZip].filter(Boolean).join(", ");
+      const encoded = encodeURIComponent(addr);
+      const geoResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`);
+      const geoData = await geoResp.json();
+      if (!geoData.length) { setGeoOk(null); setGeoStatus("Could not find venue address — check-in recorded"); return true; }
+      const venueLat = parseFloat(geoData[0].lat);
+      const venueLng = parseFloat(geoData[0].lon);
+      const dist = getDistanceMeters(pos.coords.latitude, pos.coords.longitude, venueLat, venueLng);
       if (dist <= 500) {
         setGeoOk(true);
         setGeoStatus(`✓ At venue (${Math.round(dist)}m away)`);
@@ -267,11 +275,11 @@ function ClockView({ staffMember, data, setData, onLogout }) {
       } else {
         setGeoOk(false);
         setGeoStatus(`⚠ ${Math.round(dist)}m from venue — check-in flagged`);
-        return false; // still allow but flagged
+        return false;
       }
     } catch {
       setGeoOk(null);
-      setGeoStatus("Location unavailable — check-in recorded without geo");
+      setGeoStatus("Location check failed — check-in recorded");
       return true;
     }
   }
@@ -649,13 +657,13 @@ function Clients({ data, setData }) {
 
 function Events({ data, setData }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ clientId: "", name: "", date: "", venue: "", venueLat: "", venueLng: "", guests: "", style: "Luxury", revenue: "", inventoryCost: "", laborCost: "" });
+  const [form, setForm] = useState({ clientId: "", name: "", date: "", venue: "", venueStreet: "", venueCity: "", venueState: "", venueZip: "", guests: "", style: "Luxury", revenue: "", inventoryCost: "", laborCost: "" });
   const [briefing, setBriefing] = useState({});
   const [loadingId, setLoadingId] = useState(null);
   const f = (k) => (v) => setForm(p => ({ ...p, [k]: v }));
 
   async function addEvent() {
-    const e = { id: `e${Date.now()}`, ...form, guests: parseInt(form.guests)||0, revenue: parseFloat(form.revenue)||0, inventoryCost: parseFloat(form.inventoryCost)||0, laborCost: parseFloat(form.laborCost)||0, venueLat: parseFloat(form.venueLat)||null, venueLng: parseFloat(form.venueLng)||null, status: "Booked" };
+    const e = { id: `e${Date.now()}`, ...form, guests: parseInt(form.guests)||0, revenue: parseFloat(form.revenue)||0, inventoryCost: parseFloat(form.inventoryCost)||0, laborCost: parseFloat(form.laborCost)||0, status: "Booked" };
     const updated = { ...data, events: [e, ...data.events] };
     setData(updated);
     await save("frey-events", updated.events);
@@ -685,8 +693,10 @@ function Events({ data, setData }) {
             <Input label="Date" value={form.date} onChange={f("date")} type="date" />
             <Input label="Venue" value={form.venue} onChange={f("venue")} placeholder="Grand Pavilion" />
             <Input label="Guests" value={form.guests} onChange={f("guests")} type="number" />
-            <Input label="Venue Latitude (optional)" value={form.venueLat} onChange={f("venueLat")} placeholder="44.9778" />
-            <Input label="Venue Longitude (optional)" value={form.venueLng} onChange={f("venueLng")} placeholder="-93.2650" />
+            <Input label="Street Address" value={form.venueStreet} onChange={f("venueStreet")} placeholder="123 Main St" style={{gridColumn:"1/-1"}} />
+            <Input label="City" value={form.venueCity} onChange={f("venueCity")} placeholder="Minneapolis" />
+            <Input label="State" value={form.venueState} onChange={f("venueState")} placeholder="MN" />
+            <Input label="Zip Code" value={form.venueZip} onChange={f("venueZip")} placeholder="55401" />
             <Input label="Style" value={form.style} onChange={f("style")} options={["Luxury","Modern","Boho","Rustic","Classic"]} />
             <Input label="Revenue ($)" value={form.revenue} onChange={f("revenue")} type="number" />
             <Input label="Inventory Cost ($)" value={form.inventoryCost} onChange={f("inventoryCost")} type="number" />
